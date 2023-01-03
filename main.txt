@@ -1,3 +1,0 @@
-push 100
-pop
-jump 1
