@@ -16,6 +16,60 @@ enum Val {
     Int(i64),
     Float(f64),
 }
+
+impl Val {
+
+    // Value add function with built in type coercion. Any addition of values will be valid,
+    // but types will be changed as necessary.
+    // string + {any type} -> string
+    // float + float -> float
+    // float + int -> float
+    // int + int -> int
+    pub fn add(self, other: &Val) -> Self {
+        match self {
+            Val::Str(string) => {
+                match other {
+                    Val::Str(string2) => {
+                        return Val::Str(format!("{}{}", string, string2));
+                    },
+                    Val::Float(flt2) => {
+                        return Val::Str(format!("{}{}", string, flt2));
+                    },
+                    Val::Int(int2) => {
+                        return Val::Str(format!("{}{}", string, int2));
+                    }
+                }
+            },
+            Val::Float(flt) => {
+                match other {
+                    Val::Str(string2) => {
+                        return Val::Str(format!("{}{}", flt, string2));
+                    },
+                    Val::Float(flt2) => {
+                        return Val::Float(flt + flt2);
+                    },
+                    Val::Int(int2) => {
+                        return Val::Float(flt + (*int2 as f64));
+                    }
+                }
+            },
+            Val::Int(int) => {
+                match other {
+                    Val::Str(string2) => {
+                        return Val::Str(format!("{}{}", int, string2));
+                    },
+                    Val::Float(flt2) => {
+                        return Val::Float((int as f64) + flt2);
+                    },
+                    Val::Int(int2) => {
+                        return Val::Int(int + int2);
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn parse_value(string: &str) -> Option<Val> {
     if string.starts_with("\"") && string.ends_with("\"") {
         return Some(Val::Str(string.to_string()));
@@ -42,12 +96,16 @@ enum EvaluatorErr{
     ArgMismatch(usize, usize, usize),
     ParseValueError(usize),
     EmptyStack(usize),
+    HaltedStep,
 }
 struct Evaluator {
     stack: Vec<Val>,
     program: Vec<Result<String, std::io::Error>>,
     program_counter: usize,
-    register: Val,
+    registerA: Val,
+    registerB: Val,
+    registerR: usize,
+    halt: bool,
 }
 
 impl Evaluator {
@@ -56,21 +114,29 @@ impl Evaluator {
             stack: vec![],
             program: program_vector,
             program_counter: 0,
-            register: Val::Int(0),
+            registerA: Val::Int(0),
+            registerB: Val::Int(0),
+            registerR: 0,
+            halt: false,
        } 
     }
 
-    fn push(&mut self, value: Val) -> Result<(), EvaluatorErr>{
+    fn pushi(&mut self, value: Val) -> Result<(), EvaluatorErr> {
         self.stack.push(value);
         self.program_counter += 1;
         Ok(())
+    }
+    
+    fn pushr(&mut self) -> Result<(), EvaluatorErr> {
+        self.stack.push(self.registerA.clone());
+        return Ok(());
     }
     
     pub fn pops(&mut self) -> Result<(), EvaluatorErr> {
         match self.stack.pop() {
             Some(value) => {
                 self.program_counter += 1;
-                self.register = value;
+                self.registerA = value;
                 return Ok(());
             },
             None => return Err(EvaluatorErr::EmptyStack(self.program_counter)),
@@ -92,13 +158,40 @@ impl Evaluator {
             return Err(EvaluatorErr::EmptyStack(self.program_counter))
         }
         self.program_counter += 1;
-        self.register = self.stack.get(self.stack.len() - 1).unwrap().clone();
+        self.registerA = self.stack.get(self.stack.len() - 1).unwrap().clone();
         Ok(())
     }
     
     fn jump(&mut self, line: usize) -> Result<(), EvaluatorErr> {
         self.program_counter = line - 1;
-        return Ok(());
+        Ok(())
+    }
+    
+    fn call(&mut self, line: usize) -> Result<(), EvaluatorErr> {
+        self.registerR = self.program_counter;
+        self.program_counter = line - 1;
+        Ok(())
+    }
+
+    fn ret(&mut self) -> Result<(), EvaluatorErr> {
+        self.program_counter = self.registerR;
+        Ok(())
+    }
+    
+    fn add(&mut self) -> Result<(), EvaluatorErr> {
+        if self.stack.len() < 2 {
+            return Err(EvaluatorErr::EmptyStack(self.program_counter))
+        }
+        let stack_top_index = self.stack.len()-1;
+        self.registerA = self.stack.get(stack_top_index).unwrap().clone().add(self.stack.get(stack_top_index-1).unwrap());
+        Ok(())
+    }
+    
+    fn swap(&mut self) -> Result<(), EvaluatorErr> {
+       let temp = self.registerA.clone();
+       self.registerA = self.registerB.clone();
+       self.registerB = temp; 
+       Ok(())
     }
 
     pub fn print_stack(&self) {
@@ -107,7 +200,8 @@ impl Evaluator {
         }
     }
 
-    pub fn step(&mut self) -> Result<(), EvaluatorErr>{
+    pub fn step(&mut self) -> Result<(), EvaluatorErr> {
+        if self.halt {return Err(EvaluatorErr::HaltedStep)}
         let next_command = self.program.get(self.program_counter);
         match next_command {
             Some(str_result) => {
@@ -117,13 +211,17 @@ impl Evaluator {
                         match tokens.get(0) {
                             Some(string) => {
                                 match *string {
-                                    "push" => {
+                                    "pushi" => {
                                         if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
                                         let value = parse_value(*(tokens.get(1).unwrap()));
                                         match value {
-                                            Some(something) => return self.push(something),
+                                            Some(something) => return self.pushi(something),
                                             None => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
                                         }
+                                    },
+                                    "pushr" => {
+                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                        return self.pushr();
                                     },
                                     "pop" => {
                                         if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
@@ -138,7 +236,8 @@ impl Evaluator {
                                         return self.peek()
                                     }
                                     "add" => {
-                                        println!("ADD!");
+                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                        return self.add() 
                                     },
                                     "mult" => {
                                         println!("MULT!");
@@ -156,9 +255,22 @@ impl Evaluator {
                                         }
                                     },
                                     "jzer" => {
-                                        println!("JZER!");
+                                        if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
+                                        let jump_loc = tokens[1].parse::<usize>();
+                                        // let value = parse_value(*(tokens.get(1).unwrap()));
+                                        match jump_loc {
+                                            Ok(addr) => return self.jump(addr),
+                                            Err(_) => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
+                                        }
                                     },
-                                    _ => println!("UNRECOGNIZED!!")
+                                    "halt" => {
+                                        self.halt = true;
+                                        return Ok(());
+                                    },
+                                    _ => {
+                                        println!("UNRECOGNIZED!!");
+                                        return Err(EvaluatorErr::ParseValueError(self.program_counter));
+                                    }
                                 }
                                 return Ok(())
                             },
@@ -172,3 +284,16 @@ impl Evaluator {
         }
     }
 }
+
+#[test]
+fn val_add_test() {
+    let val1 = Val::Str("Hello".to_string());
+    let val2 = Val::Float(3.14);
+    let val3 = Val::Int(5);
+    assert_eq!(val1.clone().add(&val2), Val::Str("Hello3.14".to_string()));
+    assert_eq!(val1.clone().add(&val3), Val::Str("Hello5".to_string()));
+    assert_eq!(val2.clone().add(&val3), Val::Float(8.14));
+    assert_eq!(val2.clone().add(&val2), Val::Float(6.28));
+    assert_eq!(val3.clone().add(&val3), Val::Int(10));
+}
+
