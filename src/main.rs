@@ -419,7 +419,6 @@ impl Evaluator {
                                 return Err(EvaluatorErr::ParseValueError(self.program_counter));
                             }
                         }
-                        return Ok(())
                     },
                     None => {
                         //this is the blank line case
