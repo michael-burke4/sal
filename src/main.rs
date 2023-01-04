@@ -9,12 +9,6 @@ fn main() -> io::Result<()> {
         eval.run();
         eval.print();
     }
-    // let file = File::open("main.sal")?;
-    // let reader = BufReader::new(file);
-    // let lines_vec: Vec<_> = reader.lines().collect();
-    // let mut eval = Evaluator::new(lines_vec);
-    // eval.run();
-    // eval.print();
     Ok(())
 }
 
@@ -130,7 +124,7 @@ impl Evaluator {
        } 
     }
     pub fn print(&self) {
-        println!("A:{:?} B:{:?} R:{} PC:{}", self.register_a, self.register_b, self.register_r, self.program_counter);
+        println!("A:{:?} B:{:?} R:{} PC:{}", self.register_a, self.register_b, self.register_r, self.program_counter+1);
         println!("Stack:");
         self.print_stack();
     }
@@ -270,21 +264,26 @@ impl Evaluator {
                 Err(error) => {
                     match error {
                         EvaluatorErr::LineOutOfBounds(line) => {
+                            let line = line+1;
                             println!("Line {} out of bounds", line);
                         },
                         EvaluatorErr::ArgMismatch(line, expected, got) => {
+                            let line = line+1;
                            println!("Argument error on line {line}: expected {expected}, got {got}");
                         },
                         EvaluatorErr::ParseValueError(line) => {
+                            let line = line+1;
                             println!("Parse error, could not parse supplied value on line {line}");
                         },
                         EvaluatorErr::EmptyStack(line) => {
+                            let line = line+1;
                             println!("Stack error, tried to use out of bounds stack index on line {line}");
                         },
                         EvaluatorErr::HaltedStep => {
                             println!("Tried to step evaluator after execution halted");
                         },
                         EvaluatorErr::UnsupportedOperation(line) => {
+                            let line = line+1;
                             println!("Tried to perform an unsupported operation on line {line}. Check stack and make sure you're not multiplying/dividing/subtracting using strings!");
                         }
                     }
