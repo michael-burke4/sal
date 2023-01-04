@@ -2,12 +2,20 @@ use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
 fn main() -> io::Result<()> {
-    let file = File::open("../main.txt")?;
-    let reader = BufReader::new(file);
-    let lines_vec: Vec<_> = reader.lines().collect();
-    let mut eval = Evaluator::new(lines_vec);
-    eval.run();
-    eval.print();
+    for arg in std::env::args().skip(1) {
+        let file_contents = std::fs::read_to_string(arg).unwrap();
+        let lines = file_contents.lines();
+        let lines_vec = lines.map(|s| s.to_string()).collect();
+        let mut eval = Evaluator::new(lines_vec);
+        eval.run();
+        eval.print();
+    }
+    // let file = File::open("main.sal")?;
+    // let reader = BufReader::new(file);
+    // let lines_vec: Vec<_> = reader.lines().collect();
+    // let mut eval = Evaluator::new(lines_vec);
+    // eval.run();
+    // eval.print();
     Ok(())
 }
 
@@ -99,9 +107,10 @@ enum EvaluatorErr{
     HaltedStep,
     UnsupportedOperation(usize),
 }
-struct Evaluator {
+struct Evaluator{ 
     stack: Vec<Val>,
-    program: Vec<Result<String, std::io::Error>>,
+    // program: Vec<Result<String, std::io::Error>>,
+    program: Vec<String>,
     program_counter: usize,
     register_a: Val,
     register_b: Val,
@@ -110,7 +119,7 @@ struct Evaluator {
 }
 
 impl Evaluator {
-    pub fn new(program_vector: Vec<Result<String, std::io::Error>>) -> Self {
+    pub fn new(program_vector: Vec<String>) -> Self {
        Evaluator {
             stack: vec![],
             program: program_vector,
@@ -290,88 +299,83 @@ impl Evaluator {
         if self.halt {return Err(EvaluatorErr::HaltedStep)}
         let next_command = self.program.get(self.program_counter);
         match next_command {
-            Some(str_result) => {
-                match str_result {
-                    Ok(line) => {
-                        let tokens: Vec<_> = line.split_ascii_whitespace().collect();
-                        match tokens.get(0) {
-                            Some(string) => {
-                                match *string {
-                                    "pushi" => {
-                                        if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
-                                        let value = parse_value(*(tokens.get(1).unwrap()));
-                                        match value {
-                                            Some(something) => return self.pushi(something),
-                                            None => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
-                                        }
-                                    },
-                                    "pushr" => {
-                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
-                                        return self.pushr();
-                                    },
-                                    "pop" => {
-                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
-                                        return self.pop()
-                                    },
-                                    "pops" => {
-                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
-                                        return self.pops()
-                                    },
-                                    "peek" => {
-                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
-                                        return self.peek()
-                                    },
-                                    "swap" => {
-                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
-                                        return self.swap()
-                                    },
-                                    "add" => {
-                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
-                                        return self.add() 
-                                    },
-                                    "mult" => {
-                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
-                                        return self.mult() 
-                                    },
-                                    "div" => {
-                                        println!("DIV!");
-                                    },
-                                    "jump" => {
-                                        if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
-                                        let jump_loc = tokens[1].parse::<usize>();
-                                        // let value = parse_value(*(tokens.get(1).unwrap()));
-                                        match jump_loc {
-                                            Ok(addr) => return self.jump(addr),
-                                            Err(_) => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
-                                        }
-                                    },
-                                    "jzer" => {
-                                        if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
-                                        let jump_loc = tokens[1].parse::<usize>();
-                                        // let value = parse_value(*(tokens.get(1).unwrap()));
-                                        match jump_loc {
-                                            Ok(addr) => return self.jump(addr),
-                                            Err(_) => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
-                                        }
-                                    },
-                                    "halt" => {
-                                        self.halt = true;
-                                        return Ok(());
-                                    },
-                                    _ => {
-                                        println!("UNRECOGNIZED!!");
-                                        return Err(EvaluatorErr::ParseValueError(self.program_counter));
-                                    }
+            Some(line) => {
+                let tokens: Vec<_> = line.split_ascii_whitespace().collect();
+                match tokens.get(0) {
+                    Some(string) => {
+                        match *string {
+                            "pushi" => {
+                            if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
+                                let value = parse_value(*(tokens.get(1).unwrap()));
+                                match value {
+                                    Some(something) => return self.pushi(something),
+                                    None => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
                                 }
-                                return Ok(())
                             },
-                            None => return Ok(()),
+                            "pushr" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.pushr();
+                            },
+                            "pop" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.pop()
+                            },
+                            "pops" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.pops()
+                            },
+                            "peek" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.peek()
+                            },
+                            "swap" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.swap()
+                            },
+                            "add" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.add() 
+                            },
+                            "mult" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.mult() 
+                            },
+                            "div" => {
+                                println!("DIV!");
+                            },
+                            "jump" => {
+                                if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
+                                let jump_loc = tokens[1].parse::<usize>();
+                                // let value = parse_value(*(tokens.get(1).unwrap()));
+                                match jump_loc {
+                                    Ok(addr) => return self.jump(addr),
+                                    Err(_) => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
+                                }
+                            },
+                            "jzer" => {
+                                if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
+                                let jump_loc = tokens[1].parse::<usize>();
+                                // let value = parse_value(*(tokens.get(1).unwrap()));
+                                match jump_loc {
+                                    Ok(addr) => return self.jump(addr),
+                                    Err(_) => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
+                                }
+                            },
+                            "halt" => {
+                                self.halt = true;
+                                return Ok(());
+                            },
+                            _ => {
+                                println!("UNRECOGNIZED!!");
+                                return Err(EvaluatorErr::ParseValueError(self.program_counter));
+                            }
                         }
+                        return Ok(())
                     },
-                    Err(_) => return Err(EvaluatorErr::LineOutOfBounds(self.program_counter)),
+                    None => return Ok(()),
                 }
             },
-            None => return Err(EvaluatorErr::LineOutOfBounds(self.program_counter)),
+            _ => Err(EvaluatorErr::ParseValueError(self.program_counter)),
         }
     }
 }
