@@ -256,7 +256,28 @@ impl Evaluator {
         self.program_counter += 1;
         Ok(())
     }
+    
+    fn inc(&mut self) -> Result<(), EvaluatorErr> {
+        match self.register_a {
+            Val::Int(int) => {
+                self.register_a = Val::Int(int+1);
+                self.program_counter += 1;
+                Ok(())
+            }
+            _ => Err(EvaluatorErr::UnsupportedOperation(self.program_counter))
+        }
+    }
 
+    fn dec(&mut self) -> Result<(), EvaluatorErr> {
+        match self.register_a {
+            Val::Int(int) => {
+                self.register_a = Val::Int(int-1);
+                self.program_counter += 1;
+                Ok(())
+            }
+            _ => Err(EvaluatorErr::UnsupportedOperation(self.program_counter))
+        }
+    }
     pub fn print_stack(&self) {
         for element in &self.stack {
             println!("{:?}", element);
@@ -319,6 +340,14 @@ impl Evaluator {
                             "pushr" => {
                                 if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
                                 return self.pushr();
+                            },
+                            "inc" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.inc()
+                            },
+                            "dec" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.dec()
                             },
                             "pop" => {
                                 if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
