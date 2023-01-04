@@ -74,7 +74,7 @@ impl Val {
 
 fn parse_value(string: &str) -> Option<Val> {
     if string.starts_with("\"") && string.ends_with("\"") {
-        return Some(Val::Str(string.to_string()));
+        return Some(Val::Str((string[1..string.len()-1]).to_string()));
     }
     if string.contains(".") {
         let val = string.parse::<f64>();
@@ -176,6 +176,13 @@ impl Evaluator {
         Ok(())
     }
     
+    fn jzer(&mut self, line: usize) -> Result<(), EvaluatorErr> {
+        if self.register_a == Val::Int(0) {
+            self.program_counter = line-1;
+        }
+        Ok(())
+    }
+    
     fn call(&mut self, line: usize) -> Result<(), EvaluatorErr> {
         self.register_r = self.program_counter;
         self.program_counter = line - 1;
@@ -265,29 +272,28 @@ impl Evaluator {
                     match error {
                         EvaluatorErr::LineOutOfBounds(line) => {
                             let line = line+1;
-                            println!("Line {} out of bounds", line);
+                            panic!("Line {} out of bounds", line);
                         },
                         EvaluatorErr::ArgMismatch(line, expected, got) => {
                             let line = line+1;
-                           println!("Argument error on line {line}: expected {expected}, got {got}");
+                           panic!("Argument error on line {line}: expected {expected}, got {got}");
                         },
                         EvaluatorErr::ParseValueError(line) => {
                             let line = line+1;
-                            println!("Parse error, could not parse supplied value on line {line}");
+                            panic!("Parse error, could not parse supplied value on line {line}");
                         },
                         EvaluatorErr::EmptyStack(line) => {
                             let line = line+1;
-                            println!("Stack error, tried to use out of bounds stack index on line {line}");
+                            panic!("Stack error, tried to use out of bounds stack index on line {line}");
                         },
                         EvaluatorErr::HaltedStep => {
-                            println!("Tried to step evaluator after execution halted");
+                            panic!("Tried to step evaluator after execution halted");
                         },
                         EvaluatorErr::UnsupportedOperation(line) => {
                             let line = line+1;
-                            println!("Tried to perform an unsupported operation on line {line}. Check stack and make sure you're not multiplying/dividing/subtracting using strings!");
+                            panic!("Tried to perform an unsupported operation on line {line}. Check stack and make sure you're not multiplying/dividing/subtracting using strings!");
                         }
                     }
-                    self.halt=true;
                 }
             }
         }
@@ -355,7 +361,7 @@ impl Evaluator {
                                 let jump_loc = tokens[1].parse::<usize>();
                                 // let value = parse_value(*(tokens.get(1).unwrap()));
                                 match jump_loc {
-                                    Ok(addr) => return self.jump(addr),
+                                    Ok(addr) => return self.jzer(addr),
                                     Err(_) => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
                                 }
                             },
@@ -370,10 +376,14 @@ impl Evaluator {
                         }
                         return Ok(())
                     },
-                    None => return Ok(()),
+                    None => {
+                        //this is the blank line case
+                        self.program_counter += 1;
+                        return Ok(())
+                    },
                 }
             },
-            _ => Err(EvaluatorErr::ParseValueError(self.program_counter)),
+            None => Err(EvaluatorErr::LineOutOfBounds(self.program_counter)),
         }
     }
 }
