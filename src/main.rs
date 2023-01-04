@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::{self, prelude::*, BufReader};
+use std::io;
 
 fn main() -> io::Result<()> {
     for arg in std::env::args().skip(1) {
