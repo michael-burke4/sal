@@ -1,0 +1,21 @@
+pushi 10
+jump 7
+swap
+halt
+
+
+peek
+dec
+pushr
+
+mult
+swap
+pops
+pop
+dec
+jzer 3
+swap
+pushr
+swap
+pushr
+jump 11

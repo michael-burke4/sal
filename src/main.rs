@@ -180,6 +180,9 @@ impl Evaluator {
         if self.register_a == Val::Int(0) {
             self.program_counter = line-1;
         }
+        else {
+            self.program_counter += 1;
+        }
         Ok(())
     }
     
@@ -263,7 +266,7 @@ impl Evaluator {
                 self.register_a = Val::Int(int+1);
                 self.program_counter += 1;
                 Ok(())
-            }
+            },
             _ => Err(EvaluatorErr::UnsupportedOperation(self.program_counter))
         }
     }
@@ -393,6 +396,19 @@ impl Evaluator {
                                     Ok(addr) => return self.jzer(addr),
                                     Err(_) => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
                                 }
+                            },
+                            "call" => {
+                                if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
+                                let jump_loc = tokens[1].parse::<usize>();
+                                // let value = parse_value(*(tokens.get(1).unwrap()));
+                                match jump_loc {
+                                    Ok(addr) => return self.call(addr),
+                                    Err(_) => return Err(EvaluatorErr::ParseValueError(self.program_counter)),
+                                }
+                            },
+                            "ret" => {
+                                if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                return self.ret()
                             },
                             "halt" => {
                                 self.halt = true;
