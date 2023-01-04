@@ -6,7 +6,8 @@ fn main() -> io::Result<()> {
     let reader = BufReader::new(file);
     let lines_vec: Vec<_> = reader.lines().collect();
     let mut eval = Evaluator::new(lines_vec);
-    let _ = eval.step();
+    eval.run();
+    eval.print();
     Ok(())
 }
 
@@ -92,19 +93,19 @@ fn parse_value(string: &str) -> Option<Val> {
 #[derive (Clone, Copy, Debug, PartialEq)]
 enum EvaluatorErr{
     LineOutOfBounds(usize),
-    // BadLineError(usize),
     ArgMismatch(usize, usize, usize),
     ParseValueError(usize),
     EmptyStack(usize),
     HaltedStep,
+    UnsupportedOperation(usize),
 }
 struct Evaluator {
     stack: Vec<Val>,
     program: Vec<Result<String, std::io::Error>>,
     program_counter: usize,
-    registerA: Val,
-    registerB: Val,
-    registerR: usize,
+    register_a: Val,
+    register_b: Val,
+    register_r: usize,
     halt: bool,
 }
 
@@ -114,11 +115,16 @@ impl Evaluator {
             stack: vec![],
             program: program_vector,
             program_counter: 0,
-            registerA: Val::Int(0),
-            registerB: Val::Int(0),
-            registerR: 0,
+            register_a: Val::Int(0),
+            register_b: Val::Int(0),
+            register_r: 0,
             halt: false,
        } 
+    }
+    pub fn print(&self) {
+        println!("A:{:?} B:{:?} R:{} PC:{}", self.register_a, self.register_b, self.register_r, self.program_counter);
+        println!("Stack:");
+        self.print_stack();
     }
 
     fn pushi(&mut self, value: Val) -> Result<(), EvaluatorErr> {
@@ -128,7 +134,8 @@ impl Evaluator {
     }
     
     fn pushr(&mut self) -> Result<(), EvaluatorErr> {
-        self.stack.push(self.registerA.clone());
+        self.stack.push(self.register_a.clone());
+        self.program_counter += 1;
         return Ok(());
     }
     
@@ -136,7 +143,7 @@ impl Evaluator {
         match self.stack.pop() {
             Some(value) => {
                 self.program_counter += 1;
-                self.registerA = value;
+                self.register_a = value;
                 return Ok(());
             },
             None => return Err(EvaluatorErr::EmptyStack(self.program_counter)),
@@ -158,7 +165,7 @@ impl Evaluator {
             return Err(EvaluatorErr::EmptyStack(self.program_counter))
         }
         self.program_counter += 1;
-        self.registerA = self.stack.get(self.stack.len() - 1).unwrap().clone();
+        self.register_a = self.stack.get(self.stack.len() - 1).unwrap().clone();
         Ok(())
     }
     
@@ -168,13 +175,13 @@ impl Evaluator {
     }
     
     fn call(&mut self, line: usize) -> Result<(), EvaluatorErr> {
-        self.registerR = self.program_counter;
+        self.register_r = self.program_counter;
         self.program_counter = line - 1;
         Ok(())
     }
 
     fn ret(&mut self) -> Result<(), EvaluatorErr> {
-        self.program_counter = self.registerR;
+        self.program_counter = self.register_r;
         Ok(())
     }
     
@@ -182,21 +189,100 @@ impl Evaluator {
         if self.stack.len() < 2 {
             return Err(EvaluatorErr::EmptyStack(self.program_counter))
         }
+        self.program_counter += 1;
         let stack_top_index = self.stack.len()-1;
-        self.registerA = self.stack.get(stack_top_index).unwrap().clone().add(self.stack.get(stack_top_index-1).unwrap());
+        self.register_a = self.stack.get(stack_top_index).unwrap().clone().add(self.stack.get(stack_top_index-1).unwrap());
         Ok(())
     }
     
+    // Follows similar type rules to add, but raises an error when trying to mult with any string.
+    fn mult(&mut self) -> Result<(), EvaluatorErr> {
+        if self.stack.len() < 2 {
+            return Err(EvaluatorErr::EmptyStack(self.program_counter))
+        }
+
+        let stack_top_index = self.stack.len()-1;
+        let lhs = self.stack.get(stack_top_index).unwrap().clone();
+        let rhs = self.stack.get(stack_top_index-1).unwrap().clone();
+        match lhs {
+            Val::Str(_) => {
+                return Err(EvaluatorErr::UnsupportedOperation(self.program_counter));
+            },
+            Val::Float(flt1) => {
+                match rhs {
+                    Val::Str(_) => {
+                        return Err(EvaluatorErr::UnsupportedOperation(self.program_counter));
+                    },
+                    Val::Float(flt2) => {
+                        self.register_a = Val::Float(flt1*flt2);
+                    },
+                    Val::Int(int2) => {
+                        self.register_a = Val::Float(flt1 * (int2 as f64));
+                    }
+                }
+            },
+            Val::Int(int1) => {
+                match rhs {
+                    Val::Str(_) => {
+                        return Err(EvaluatorErr::UnsupportedOperation(self.program_counter));
+                    },
+                    Val::Float(flt2) => {
+                        self.register_a = Val::Float((int1 as f64) *flt2);
+                    },
+                    Val::Int(int2) => {
+                        self.register_a = Val::Int(int1 * int2);
+                    }
+                }
+            },
+        }
+
+        self.program_counter += 1;    
+        Ok(())
+    }
+
     fn swap(&mut self) -> Result<(), EvaluatorErr> {
-       let temp = self.registerA.clone();
-       self.registerA = self.registerB.clone();
-       self.registerB = temp; 
-       Ok(())
+        let temp = self.register_a.clone();
+        self.register_a = self.register_b.clone();
+        self.register_b = temp; 
+        self.program_counter += 1;
+        Ok(())
     }
 
     pub fn print_stack(&self) {
         for element in &self.stack {
             println!("{:?}", element);
+        }
+    }
+    
+    pub fn run(&mut self) {
+        while !self.halt {
+            let step_result = self.step();
+            match step_result {
+                Ok(()) => continue,
+                Err(error) => {
+                    match error {
+                        EvaluatorErr::LineOutOfBounds(line) => {
+                            println!("Line {} out of bounds", line);
+                        },
+                        EvaluatorErr::ArgMismatch(line, expected, got) => {
+                           println!("Argument error on line {line}: expected {expected}, got {got}");
+                        },
+                        EvaluatorErr::ParseValueError(line) => {
+                            println!("Parse error, could not parse supplied value on line {line}");
+                        },
+                        EvaluatorErr::EmptyStack(line) => {
+                            println!("Stack error, tried to use out of bounds stack index on line {line}");
+                        },
+                        EvaluatorErr::HaltedStep => {
+                            println!("Tried to step evaluator after execution halted");
+                        },
+                        EvaluatorErr::UnsupportedOperation(line) => {
+                            println!("Tried to perform an unsupported operation on line {line}. Check stack and make sure you're not multiplying/dividing/subtracting using strings!");
+                        }
+                    }
+                    self.halt=true;
+                }
+            }
         }
     }
 
@@ -234,13 +320,18 @@ impl Evaluator {
                                     "peek" => {
                                         if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
                                         return self.peek()
-                                    }
+                                    },
+                                    "swap" => {
+                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                        return self.swap()
+                                    },
                                     "add" => {
                                         if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
                                         return self.add() 
                                     },
                                     "mult" => {
-                                        println!("MULT!");
+                                        if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
+                                        return self.mult() 
                                     },
                                     "div" => {
                                         println!("DIV!");
