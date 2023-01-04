@@ -141,7 +141,7 @@ impl Evaluator {
         return Ok(());
     }
     
-    pub fn pops(&mut self) -> Result<(), EvaluatorErr> {
+    fn pops(&mut self) -> Result<(), EvaluatorErr> {
         match self.stack.pop() {
             Some(value) => {
                 self.program_counter += 1;
@@ -152,7 +152,7 @@ impl Evaluator {
         }
     }
 
-    pub fn pop(&mut self) -> Result<(), EvaluatorErr> {
+    fn pop(&mut self) -> Result<(), EvaluatorErr> {
         match self.stack.pop() {
             Some(_) => {
                 self.program_counter += 1;
@@ -376,9 +376,9 @@ impl Evaluator {
                                 if tokens.len() != 1 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 0))}
                                 return self.mult() 
                             },
-                            "div" => {
-                                println!("DIV!");
-                            },
+                            // "div" => {
+                                // println!("DIV!");
+                            // },
                             "jump" => {
                                 if tokens.len() != 2 {return Err(EvaluatorErr::ArgMismatch(self.program_counter, tokens.len()-1, 1))}
                                 let jump_loc = tokens[1].parse::<usize>();
